@@ -21,6 +21,7 @@ export default function ChatApp({ userEmail, onLogout }: ChatAppProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  const [loadingHistory, setLoadingHistory] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
@@ -32,6 +33,28 @@ export default function ChatApp({ userEmail, onLogout }: ChatAppProps) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // ── Load history when a conversation is selected ───────────────────────────
+  const loadConversationHistory = useCallback(async (id: string) => {
+    setLoadingHistory(true)
+    setMessages([])
+    setConversationId(id)
+    try {
+      const data = await chatApi.getMessages(id)
+      const loaded: Message[] = data.messages.map(m => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+        timestamp: new Date(m.created_at),
+      }))
+      setMessages(loaded)
+    } catch {
+      // If history fails, still open the conversation — user can continue from here
+      setMessages([])
+    } finally {
+      setLoadingHistory(false)
+    }
+  }, [])
 
   const newId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`
 
@@ -48,10 +71,9 @@ export default function ChatApp({ userEmail, onLogout }: ChatAppProps) {
 
     if (useStreaming) {
       const assistantId = newId()
-      const assistantMsg: Message = {
+      setMessages(prev => [...prev, {
         id: assistantId, role: 'assistant', content: '', timestamp: new Date(), streaming: true
-      }
-      setMessages(prev => [...prev, assistantMsg])
+      }])
 
       let fullContent = ''
       let convId = conversationId
@@ -66,29 +88,37 @@ export default function ChatApp({ userEmail, onLogout }: ChatAppProps) {
           if (done) break
           const chunk = typeof value === 'string' ? value : decoder.decode(value)
 
-          // Parse SSE lines
           const lines = chunk.split('\n')
-          for (const line of lines) {
-            if (line.startsWith('event: token')) continue
-            if (line.startsWith('data: ') && !line.includes('event: done')) {
-              const data = line.slice(6)
-              // check if it looks like a conversation ID (UUID)
-              if (/^[0-9a-f-]{36}$/.test(data)) {
-                convId = data
-                if (!conversationId) setConversationId(data)
-              } else {
-                fullContent += data
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i]
+            if (line.startsWith('event: done')) {
+              const nextLine = lines[i + 1] || ''
+              const id = nextLine.replace('data: ', '').trim()
+              if (id && /^[0-9a-f-]{36}$/.test(id)) {
+                convId = id
+                setConversationId(id)
+              }
+            } else if (line.startsWith('event: token')) {
+              // next line is the data
+              const nextLine = lines[i + 1] || ''
+              if (nextLine.startsWith('data: ')) {
+                const token = nextLine.slice(6)
+                fullContent += token
                 setMessages(prev => prev.map(m =>
                   m.id === assistantId ? { ...m, content: fullContent } : m
                 ))
               }
-            }
-            if (line.startsWith('event: done')) {
-              const dataLine = lines[lines.indexOf(line) + 1] || ''
-              const id = dataLine.replace('data: ', '').trim()
-              if (id && /^[0-9a-f-]{36}$/.test(id)) {
-                convId = id
-                if (!conversationId) setConversationId(id)
+            } else if (line.startsWith('data: ') && !line.startsWith('data: \n')) {
+              const data = line.slice(6)
+              // Standalone data lines that aren't UUIDs are token content
+              if (/^[0-9a-f-]{36}$/.test(data)) {
+                convId = data
+                setConversationId(data)
+              } else if (data && data !== '') {
+                fullContent += data
+                setMessages(prev => prev.map(m =>
+                  m.id === assistantId ? { ...m, content: fullContent } : m
+                ))
               }
             }
           }
@@ -101,11 +131,12 @@ export default function ChatApp({ userEmail, onLogout }: ChatAppProps) {
         setRefreshTrigger(n => n + 1)
       } catch {
         setMessages(prev => prev.map(m =>
-          m.id === assistantId ? { ...m, content: 'Something went wrong. Please try again.', streaming: false } : m
+          m.id === assistantId
+            ? { ...m, content: 'Something went wrong. Please try again.', streaming: false }
+            : m
         ))
       }
     } else {
-      // Non-streaming fallback
       const assistantId = newId()
       setMessages(prev => [...prev, {
         id: assistantId, role: 'assistant', content: '', timestamp: new Date(), streaming: true
@@ -119,7 +150,9 @@ export default function ChatApp({ userEmail, onLogout }: ChatAppProps) {
         setRefreshTrigger(n => n + 1)
       } catch {
         setMessages(prev => prev.map(m =>
-          m.id === assistantId ? { ...m, content: 'Something went wrong. Please try again.', streaming: false } : m
+          m.id === assistantId
+            ? { ...m, content: 'Something went wrong. Please try again.', streaming: false }
+            : m
         ))
       }
     }
@@ -142,12 +175,11 @@ export default function ChatApp({ userEmail, onLogout }: ChatAppProps) {
   }
 
   const handleSelectConversation = (id: string) => {
-    setMessages([])
-    setConversationId(id)
-    // We just set the ID; the next message sent will continue this conversation
+    if (id === conversationId) return   // already open
+    loadConversationHistory(id)
   }
 
-  const isEmpty = messages.length === 0
+  const isEmpty = messages.length === 0 && !loadingHistory
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -185,9 +217,11 @@ export default function ChatApp({ userEmail, onLogout }: ChatAppProps) {
                 color: 'var(--text-primary)',
                 letterSpacing: '-0.01em',
               }}>
-                {conversationId ? 'Conversation' : 'New Chat'}
+                {loadingHistory
+                  ? 'Loading…'
+                  : conversationId ? 'Conversation' : 'New Chat'}
               </h2>
-              {conversationId && (
+              {conversationId && !loadingHistory && (
                 <p className="text-xs" style={{ color: 'var(--text-muted)', fontFamily: 'monospace' }}>
                   {conversationId.slice(0, 8)}…
                 </p>
@@ -219,7 +253,30 @@ export default function ChatApp({ userEmail, onLogout }: ChatAppProps) {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto">
-          {isEmpty ? (
+
+          {/* Loading history skeleton */}
+          {loadingHistory && (
+            <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className={`flex gap-3 ${i % 2 === 0 ? 'flex-row-reverse' : 'flex-row'}`}
+                  style={{ animation: `fadeUp 0.3s ease-out ${i * 0.06}s both` }}>
+                  {/* Avatar skeleton */}
+                  <div className="w-8 h-8 rounded-xl flex-shrink-0 shimmer"
+                    style={{ background: 'rgba(255,255,255,0.07)' }} />
+                  {/* Bubble skeleton */}
+                  <div className="rounded-2xl shimmer"
+                    style={{
+                      background: 'rgba(255,255,255,0.07)',
+                      width: `${180 + (i * 37) % 120}px`,
+                      height: i % 3 === 0 ? '60px' : '40px',
+                    }} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Empty state */}
+          {isEmpty && (
             <div className="flex flex-col items-center justify-center h-full px-6 text-center">
               <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
                 style={{
@@ -240,12 +297,10 @@ export default function ChatApp({ userEmail, onLogout }: ChatAppProps) {
               <p className="mb-8 text-sm max-w-xs" style={{ color: 'var(--text-secondary)' }}>
                 I remember context across your conversations. Ask me anything.
               </p>
-
-              {/* Suggestion chips */}
               <div className="grid grid-cols-2 gap-2 max-w-md w-full">
                 {SUGGESTIONS.map((s, i) => (
                   <button key={i} onClick={() => handleSend(s)}
-                    className="glass-btn rounded-xl px-3 py-2.5 text-left text-xs transition-all"
+                    className="glass-btn rounded-xl px-3 py-2.5 text-left text-xs"
                     style={{
                       color: 'var(--text-secondary)',
                       fontFamily: 'var(--font-body)',
@@ -256,7 +311,10 @@ export default function ChatApp({ userEmail, onLogout }: ChatAppProps) {
                 ))}
               </div>
             </div>
-          ) : (
+          )}
+
+          {/* Message list */}
+          {!loadingHistory && messages.length > 0 && (
             <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
               {messages.map((msg, i) => (
                 <MessageBubble key={msg.id} message={msg} index={i} />
@@ -283,7 +341,8 @@ export default function ChatApp({ userEmail, onLogout }: ChatAppProps) {
                   e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px'
                 }}
                 onKeyDown={handleKeyDown}
-                placeholder="Message AI… (Enter to send, Shift+Enter for newline)"
+                placeholder={loadingHistory ? 'Loading conversation…' : 'Message AI… (Enter to send, Shift+Enter for newline)'}
+                disabled={loadingHistory}
                 rows={1}
                 className="flex-1 resize-none bg-transparent outline-none text-sm leading-relaxed"
                 style={{
@@ -291,20 +350,21 @@ export default function ChatApp({ userEmail, onLogout }: ChatAppProps) {
                   fontFamily: 'var(--font-body)',
                   maxHeight: '140px',
                   minHeight: '24px',
+                  opacity: loadingHistory ? 0.4 : 1,
                 }}
               />
               <button
                 onClick={() => handleSend(input)}
-                disabled={!input.trim() || sending}
+                disabled={!input.trim() || sending || loadingHistory}
                 className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200"
                 style={{
-                  background: input.trim() && !sending
+                  background: input.trim() && !sending && !loadingHistory
                     ? 'linear-gradient(135deg, rgba(96,180,255,0.5), rgba(93,232,216,0.4))'
                     : 'rgba(255,255,255,0.08)',
                   border: '1px solid rgba(255,255,255,0.25)',
-                  cursor: !input.trim() || sending ? 'not-allowed' : 'pointer',
+                  cursor: !input.trim() || sending || loadingHistory ? 'not-allowed' : 'pointer',
                   boxShadow: input.trim() && !sending ? '0 4px 16px rgba(96,180,255,0.2)' : 'none',
-                  opacity: !input.trim() || sending ? 0.5 : 1,
+                  opacity: !input.trim() || sending || loadingHistory ? 0.5 : 1,
                 }}>
                 {sending
                   ? <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
