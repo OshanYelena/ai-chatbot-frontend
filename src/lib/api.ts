@@ -126,6 +126,16 @@ export const chatApi = {
     if (!res.ok) throw new Error(data.detail || 'Failed to load conversations')
     return data as Conversation[]
   },
+
+  // Fetch full message history for a conversation
+  getMessages: async (conversation_id: string) => {
+    const res = await fetch(`${CHAT_URL}/api/v1/conversations/${conversation_id}/messages`, {
+      headers: { Authorization: `Bearer ${tokenStore.get()}` },
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.detail || 'Failed to load messages')
+    return data as ConversationHistory
+  },
 }
 
 export interface Message {
@@ -142,4 +152,15 @@ export interface Conversation {
   created_at: string
   last_activity_at: string
   last_message: string | null
+}
+
+export interface ConversationHistory {
+  conversation_id: string
+  summary: string | null
+  messages: Array<{
+    id: string
+    role: string
+    content: string
+    created_at: string
+  }>
 }
