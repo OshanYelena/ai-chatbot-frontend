@@ -1,0 +1,134 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: 'Sora', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+
+  /* Liquid Glass Design Tokens */
+  --glass-bg: rgba(255, 255, 255, 0.12);
+  --glass-bg-strong: rgba(255, 255, 255, 0.22);
+  --glass-bg-subtle: rgba(255, 255, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.35);
+  --glass-border-subtle: rgba(255, 255, 255, 0.15);
+  --glass-shadow: 0 8px 32px rgba(31, 38, 135, 0.18);
+  --glass-shadow-lg: 0 20px 60px rgba(31, 38, 135, 0.25);
+  --glass-highlight: rgba(255, 255, 255, 0.6);
+  --glass-blur: blur(24px);
+  --glass-blur-sm: blur(12px);
+
+  /* Color palette */
+  --accent-blue: #60b4ff;
+  --accent-cyan: #5de8d8;
+  --accent-purple: #b88fff;
+  --accent-rose: #ff7eb3;
+  --accent-amber: #ffb347;
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.65);
+  --text-muted: rgba(255, 255, 255, 0.38);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Liquid Glass Utility Classes ──────────────────────────────────────────── */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-highlight);
+}
+
+.glass-strong {
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-lg), inset 0 1px 0 var(--glass-highlight);
+}
+
+.glass-subtle {
+  background: var(--glass-bg-subtle);
+  backdrop-filter: var(--glass-blur-sm);
+  -webkit-backdrop-filter: var(--glass-blur-sm);
+  border: 1px solid var(--glass-border-subtle);
+}
+
+.glass-btn {
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur-sm);
+  -webkit-backdrop-filter: var(--glass-blur-sm);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255,255,255,0.5);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.glass-btn:hover {
+  background: rgba(255,255,255,0.28);
+  box-shadow: 0 12px 40px rgba(31,38,135,0.28), inset 0 1px 0 rgba(255,255,255,0.65);
+  transform: translateY(-1px);
+}
+.glass-btn:active { transform: translateY(0); }
+
+.glass-input {
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+  outline: none;
+}
+.glass-input::placeholder { color: var(--text-muted); }
+.glass-input:focus {
+  background: rgba(255,255,255,0.14);
+  border-color: rgba(255,255,255,0.45);
+  box-shadow: 0 0 0 3px rgba(96, 180, 255, 0.2), inset 0 1px 0 rgba(255,255,255,0.3);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.2);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.35); }
+
+/* Selection */
+::selection { background: rgba(96, 180, 255, 0.35); color: white; }
+
+/* Typing cursor blink */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+.cursor-blink::after {
+  content: '▋';
+  animation: blink 0.8s step-end infinite;
+  color: var(--accent-cyan);
+  margin-left: 2px;
+}
+
+/* Shimmer for loading */
+@keyframes shimmer-move {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%);
+  background-size: 400px 100%;
+  animation: shimmer-move 1.4s ease-in-out infinite;
+}
